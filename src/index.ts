@@ -94,10 +94,9 @@ export function apply(ctx: Context, config: Config) {
       .option('balogo', '-balogo <right:text> 生成BA风格logo')
       .option('mcpfp', '-mcpfp 生成MC玩家头像')
       .action(async ({ options, session }, content) => {
-        if (!content) return session.send('请提供要生成的内容')
-
         try {
           if (options.xb) {
+            if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/xibao.jpg'))
             const image = await ctx.puppeteer.render(
               generateHTML({
@@ -111,8 +110,9 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return session.send(segment.image(image))
+            return segment.image(image)
           } else if (options.bb) {
+            if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/beibao.jpg'))
             const image = await ctx.puppeteer.render(
               generateHTML({
@@ -126,8 +126,9 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return session.send(segment.image(image))
+            return segment.image(image)
           } else if (options.balogo) {
+            if (!content) return '请提供要生成的内容'
             const page = await ctx.puppeteer.browser.newPage()
             await page.goto(`file://${path.resolve(__dirname, '../public/balogo.html')}`, { waitUntil: 'networkidle0' })
             await page.evaluate(async (inputs, config) => {
@@ -146,17 +147,15 @@ export function apply(ctx: Context, config: Config) {
             const canvas = await page.$('#output')
             const image = await canvas.screenshot({ type: 'png', omitBackground: true })
             await page.close()
-            return session.send(segment.image(`data:image/png;base64,${image.toString('base64')}`))
+            return segment.image(`data:image/png;base64,${image.toString('base64')}`)
           } else if (options.mcpfp) {
-            // 处理MC玩家头像生成
-            if(!config.mcpfp.enablePfp) return session.send('PFP指令未启用')
-
+            if(!config.mcpfp.enablePfp) return '该指令未启用'
             const player = content || config.mcpfp.initName
             const uuidName = await getUuidNameByName(ctx, player)
-            if(!uuidName) return session.send('未找到该玩家')
+            if(!uuidName) return '未找到该玩家'
 
             const profB64 = await getProfileB64ByUuid(ctx, uuidName.id)
-            if(!profB64) return session.send('获取玩家资料失败')
+            if(!profB64) return '获取玩家资料失败'
 
             const skinUrl = getSkinUrlByProfileB64(profB64)
             const image = await generatePfpPic(
@@ -165,17 +164,18 @@ export function apply(ctx: Context, config: Config) {
               config.mcpfp.gradientDirection,
               skinUrl
             )
-            return session.send(segment.image(image))
+            return segment.image(image)
           }
 
+          if (!content) return '请提供要生成的内容'
           const image = await ctx.puppeteer.render(`
             <div style="padding: 20px; background: white;">
               <h1>${content}</h1>
             </div>
           `)
-          return session.send(segment.image(image))
+          return segment.image(image)
         } catch (error) {
-          return session.send('图片生成失败：' + error.message)
+          return '图片生成失败：' + error.message
         }
       })
 }
