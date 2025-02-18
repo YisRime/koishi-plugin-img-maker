@@ -1,4 +1,4 @@
-import { Context, Schema, segment } from 'koishi'
+import { Context, Schema, h } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import {} from '@koishijs/canvas'  // 添加canvas导入
 import { readFileSync } from 'fs'
@@ -118,7 +118,7 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
+            return h('image', { src: `base64://${Buffer.isBuffer(image) ? image.toString('base64') : image}` })
           } else if (options.bb) {
             if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/beibao.jpg'))
@@ -134,7 +134,7 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
+            return h('image', { src: `base64://${Buffer.isBuffer(image) ? image.toString('base64') : image}` })
           } else if (options.balogo) {
             if (!content) return '请提供要生成的内容'
             const page = await ctx.puppeteer.browser.newPage()
@@ -156,7 +156,7 @@ export function apply(ctx: Context, config: Config) {
             // 直接返回Buffer而不是转base64
             const image = await canvas.screenshot({ type: 'png', omitBackground: true })
             await page.close()
-            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
+            return h('image', { src: `base64://${Buffer.isBuffer(image) ? image.toString('base64') : image}` })
           } else if (options.mcpfp) {
             if(!config.mcpfp.enablePfp) return '该指令未启用'
             const player = content || config.mcpfp.initName
@@ -173,7 +173,7 @@ export function apply(ctx: Context, config: Config) {
               config.mcpfp.gradientDirection,
               skinUrl
             )
-            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
+            return h('image', { src: `base64://${Buffer.isBuffer(image) ? image.toString('base64') : image}` })
           }
 
           if (!content) return '请提供要生成的内容'
@@ -182,7 +182,7 @@ export function apply(ctx: Context, config: Config) {
               <h1>${content}</h1>
             </div>
           `)
-          return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
+          return h('image', { src: `base64://${Buffer.isBuffer(image) ? image.toString('base64') : image}` })
         } catch (error) {
           return '图片生成失败：' + error.message
         }
