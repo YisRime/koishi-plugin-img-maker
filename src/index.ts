@@ -87,6 +87,9 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export function apply(ctx: Context, config: Config) {
+  // 添加日志记录
+  const logger = ctx.logger('img-maker')
+
   ctx.command('make <content:text>')
       .usage(`支持以下类型：
 -xb 生成喜报样式图片
@@ -103,10 +106,12 @@ export function apply(ctx: Context, config: Config) {
       .example('make -mcpfp Notch')
       .action(async ({ options }, content) => {
         try {
+          let image: Buffer
+
           if (options.xb) {
             if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/xibao.jpg'))
-            const image = await ctx.puppeteer.render(
+            image = Buffer.from(await ctx.puppeteer.render(
               generateHTML({
                 text: content,
                 fontFamily: config.xibao.fontFamily,
@@ -117,12 +122,11 @@ export function apply(ctx: Context, config: Config) {
                 offsetWidth: config.xibao.offsetWidth,
                 img
               })
-            )
-            return h('image', { file: image })
+            ))
           } else if (options.bb) {
             if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/beibao.jpg'))
-            const image = await ctx.puppeteer.render(
+            image = Buffer.from(await ctx.puppeteer.render(
               generateHTML({
                 text: content,
                 fontFamily: config.beibao.fontFamily,
@@ -133,8 +137,7 @@ export function apply(ctx: Context, config: Config) {
                 offsetWidth: config.beibao.offsetWidth,
                 img
               })
-            )
-            return h('image', { file: image })
+            ))
           } else if (options.balogo) {
             if (!content) return '请提供要生成的内容'
             const page = await ctx.puppeteer.browser.newPage()
@@ -154,9 +157,8 @@ export function apply(ctx: Context, config: Config) {
 
             const canvas = await page.$('#output')
             // 直接返回Buffer而不是转base64
-            const image = await canvas.screenshot({ type: 'png', omitBackground: true })
+            image = await canvas.screenshot({ type: 'png', omitBackground: true })
             await page.close()
-            return h('image', { file: image })
           } else if (options.mcpfp) {
             if(!config.mcpfp.enablePfp) return '该指令未启用'
             const player = content || config.mcpfp.initName
@@ -167,23 +169,38 @@ export function apply(ctx: Context, config: Config) {
             if(!profB64) return '获取玩家资料失败'
 
             const skinUrl = getSkinUrlByProfileB64(profB64)
-            const image = await generatePfpPic(
+            image = await generatePfpPic(
               ctx,
               config.mcpfp.wallColors,
               config.mcpfp.gradientDirection,
               skinUrl
             )
-            return h('image', { file: image })
+          } else {
+            if (!content) return '请提供要生成的内容'
+            const html = `
+              <div style="padding: 20px; background: white;">
+                <h1>${content}</h1>
+              </div>
+            `
+            image = Buffer.from(await ctx.puppeteer.render(html))
           }
 
-          if (!content) return '请提供要生成的内容'
-          const image = await ctx.puppeteer.render(`
-            <div style="padding: 20px; background: white;">
-              <h1>${content}</h1>
-            </div>
-          `)
-          return h('image', { file: image })
+          // 验证图片是否生成成功
+          if (!image || image.length === 0) {
+            logger.error('图片生成失败: 空的图片缓冲区')
+            return '图片生成失败'
+          }
+
+          // 添加错误处理
+          try {
+            return h.image(image, 'image/png')
+          } catch (err) {
+            logger.error(`发送图片失败: ${err.message}`)
+            return '图片发送失败，请稍后重试'
+          }
+
         } catch (error) {
+          logger.error(`图片生成错误: ${error.message}`)
           return '图片生成失败：' + error.message
         }
       })
