@@ -105,43 +105,45 @@ export function apply(ctx: Context, config: Config) {
       .example('make -balogo 档案 蔚蓝')
       .example('make -mcpfp Notch')
       .action(async ({ options }, content) => {
+        let browserContext
+        let page
+
         try {
+          browserContext = await ctx.puppeteer.browser.createBrowserContext()
+          page = await browserContext.newPage()
+
           let image: Buffer
 
-          if (options.xb) {
-            if (!content) return '请提供要生成的内容'
-            const img = readFileSync(path.resolve(__dirname, './assets/images/xibao.jpg'))
-            image = Buffer.from(await ctx.puppeteer.render(
-              generateHTML({
-                text: content,
-                fontFamily: config.xibao.fontFamily,
-                fontColor: '#ff0a0a',
-                strokeColor: '#ffde00',
-                maxFontSize: config.xibao.maxFontSize,
-                minFontSize: config.xibao.minFontSize,
-                offsetWidth: config.xibao.offsetWidth,
-                img
-              })
-            ))
-          } else if (options.bb) {
-            if (!content) return '请提供要生成的内容'
-            const img = readFileSync(path.resolve(__dirname, './assets/images/beibao.jpg'))
-            image = Buffer.from(await ctx.puppeteer.render(
-              generateHTML({
-                text: content,
-                fontFamily: config.beibao.fontFamily,
-                fontColor: '#000500',
-                strokeColor: '#c6c6c6',
-                maxFontSize: config.beibao.maxFontSize,
-                minFontSize: config.beibao.minFontSize,
-                offsetWidth: config.beibao.offsetWidth,
-                img
-              })
-            ))
+          if (options.xb || options.bb) {
+            const template = options.xb ? 'xibao' : 'beibao'
+            const cfg = options.xb ? config.xibao : config.beibao
+            const img = readFileSync(path.resolve(__dirname, `./assets/images/${template}.jpg`))
+
+            await page.setContent(generateHTML({
+              text: content,
+              fontFamily: cfg.fontFamily,
+              fontColor: options.xb ? '#ff0a0a' : '#000500',
+              strokeColor: options.xb ? '#ffde00' : '#c6c6c6',
+              maxFontSize: cfg.maxFontSize,
+              minFontSize: cfg.minFontSize,
+              offsetWidth: cfg.offsetWidth,
+              img
+            }))
+
+            await page.waitForSelector('.container')
+            const element = await page.$('.container')
+            image = await element.screenshot({
+              type: 'png'
+            })
+
           } else if (options.balogo) {
             if (!content) return '请提供要生成的内容'
-            const page = await ctx.puppeteer.browser.newPage()
-            await page.goto(`file://${path.resolve(__dirname, '../public/balogo.html')}`, { waitUntil: 'networkidle0' })
+
+            await page.goto(`file://${path.resolve(__dirname, '../public/balogo.html')}`, {
+              waitUntil: 'networkidle0',
+              timeout: 10000
+            })
+
             await page.evaluate(async (inputs, config) => {
               const ba = new BALogo({
                 options: {
@@ -155,10 +157,13 @@ export function apply(ctx: Context, config: Config) {
               await ba.draw({ textL: inputs.left, textR: inputs.right })
             }, { left: content, right: options.balogo }, config.balogo)
 
+            await page.waitForSelector('#output')
             const canvas = await page.$('#output')
-            // 直接返回Buffer而不是转base64
-            image = await canvas.screenshot({ type: 'png', omitBackground: true })
-            await page.close()
+            image = await canvas.screenshot({
+              type: 'png',
+              omitBackground: true
+            })
+
           } else if (options.mcpfp) {
             if(!config.mcpfp.enablePfp) return '该指令未启用'
             const player = content || config.mcpfp.initName
@@ -177,31 +182,33 @@ export function apply(ctx: Context, config: Config) {
             )
           } else {
             if (!content) return '请提供要生成的内容'
-            const html = `
+
+            await page.setContent(`
               <div style="padding: 20px; background: white;">
-                <h1>${content}</h1>
+                <h1>${escapeHTML(content)}</h1>
               </div>
-            `
-            image = Buffer.from(await ctx.puppeteer.render(html))
+            `)
+
+            const element = await page.$('div')
+            image = await element.screenshot({
+              type: 'png'
+            })
           }
 
-          // 验证图片是否生成成功
           if (!image || image.length === 0) {
             logger.error('图片生成失败: 空的图片缓冲区')
             return '图片生成失败'
           }
 
-          // 添加错误处理
-          try {
-            return h.image(image, 'image/png')
-          } catch (err) {
-            logger.error(`发送图片失败: ${err.message}`)
-            return '图片发送失败，请稍后重试'
-          }
+          return h.image(image, 'image/png')
 
         } catch (error) {
           logger.error(`图片生成错误: ${error.message}`)
           return '图片生成失败：' + error.message
+        } finally {
+          // 确保资源被释放
+          if (page) await page.close()
+          if (browserContext) await browserContext.close()
         }
       })
 }
