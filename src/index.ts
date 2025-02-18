@@ -54,46 +54,54 @@ interface StyleConfig {
 
 export const Config: Schema<Config> = Schema.object({
   xibao: Schema.object({
-    fontFamily: Schema.string().default('"HarmonyOS Sans SC", "Source Han Sans CN", sans-serif'),
-    maxFontSize: Schema.number().min(1).default(80),
-    minFontSize: Schema.number().min(1).default(38),
-    offsetWidth: Schema.number().min(1).default(900)
-  }),
+    fontFamily: Schema.string().default('"HarmonyOS Sans SC", "Source Han Sans CN", sans-serif').description('字体设置'),
+    maxFontSize: Schema.number().min(1).default(80).description('最大字号'),
+    minFontSize: Schema.number().min(1).default(38).description('最小字号'),
+    offsetWidth: Schema.number().min(1).default(900).description('文字区域宽度')
+  }).description('喜报样式设置'),
   beibao: Schema.object({
-    fontFamily: Schema.string().default('"HarmonyOS Sans SC", "Source Han Sans CN", sans-serif'),
-    maxFontSize: Schema.number().min(1).default(90),
-    minFontSize: Schema.number().min(1).default(38),
-    offsetWidth: Schema.number().min(1).default(900)
-  }),
+    fontFamily: Schema.string().default('"HarmonyOS Sans SC", "Source Han Sans CN", sans-serif').description('字体设置'),
+    maxFontSize: Schema.number().min(1).default(90).description('最大字号'),
+    minFontSize: Schema.number().min(1).default(38).description('最小字号'),
+    offsetWidth: Schema.number().min(1).default(900).description('文字区域宽度')
+  }).description('悲报样式设置'),
   balogo: Schema.object({
-    fontSize: Schema.number().default(84),
-    transparent: Schema.boolean().default(false),
-    haloX: Schema.number().default(-18),
-    haloY: Schema.number().default(0)
-  }),
-  // 添加mcpfp配置项
+    fontSize: Schema.number().default(84).description('字体大小'),
+    transparent: Schema.boolean().default(false).description('是否透明背景'),
+    haloX: Schema.number().default(-18).description('光晕X轴偏移'),
+    haloY: Schema.number().default(0).description('光晕Y轴偏移')
+  }).description('BA风格logo设置'),
   mcpfp: Schema.object({
     enablePfp: Schema.boolean().default(false).description('是否启用PFP指令'),
     initName: Schema.string().default('steve').description('默认玩家名称'),
     isShowCape: Schema.boolean().default(false).description('是否显示披风'),
-    gradientDirection: Schema.number().min(0).max(7).default(0).description('背景渐变方向'),
+    gradientDirection: Schema.number().min(0).max(7).default(0).description('背景渐变方向(0-7)'),
     wallColors: Schema.union([
       Schema.string().description('预设背景(背景1-背景5)'),
       Schema.object({
-        startColor: Schema.string().role('color'),
-        endColor: Schema.string().role('color')
+        startColor: Schema.string().role('color').description('渐变起始颜色'),
+        endColor: Schema.string().role('color').description('渐变结束颜色')
       }).description('自定义颜色')
-    ]).default('背景1')
-  })
+    ]).default('背景1').description('背景颜色设置')
+  }).description('MC玩家头像设置')
 })
 
 export function apply(ctx: Context, config: Config) {
   ctx.command('make <content:text>')
-      .option('xb', '-xb 生成喜报')
-      .option('bb', '-bb 生成悲报')
-      .option('balogo', '-balogo <right:text> 生成BA风格logo')
-      .option('mcpfp', '-mcpfp 生成MC玩家头像')
-      .action(async ({ options, session }, content) => {
+      .usage(`支持以下类型：
+-xb 生成喜报样式图片
+-bb 生成悲报样式图片
+-balogo <右侧文本> 生成BA风格logo
+-mcpfp 生成MC玩家头像`)
+      .option('xb', '-xb 使用喜报模板生成图片')
+      .option('bb', '-bb 使用悲报模板生成图片')
+      .option('balogo', '-balogo <right:text> 生成蔚蓝档案(BA)风格logo，right为右侧文本')
+      .option('mcpfp', '-mcpfp 生成我的世界(Minecraft)玩家头像')
+      .example('make -xb 喜报！今天你的女装到了！')
+      .example('make -bb 悲报！我的女装被室友发现了！')
+      .example('make -balogo 档案 蔚蓝')
+      .example('make -mcpfp Notch')
+      .action(async ({ options }, content) => {
         try {
           if (options.xb) {
             if (!content) return '请提供要生成的内容'
@@ -315,7 +323,6 @@ async function generatePfpPic(ctx: Context, wall: string | string[] | { startCol
   }
 
   // 绘制皮肤
-  const skin_image = await ctx.canvas.loadImage(skin)
   // ...绘制皮肤的具体逻辑...
   ctx2d.drawImage(shading, 0, 0, 20 * scale, 20 * scale)
   return await canvas.toDataURL('image/png')
