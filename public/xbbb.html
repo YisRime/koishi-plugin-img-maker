@@ -1,0 +1,32 @@
+<head>
+  <style>
+    body {
+      width: 960px;
+      height: 768px;
+      padding: 0 32px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      margin: 0;
+      font-weight: 900;
+      font-family: var(--font-family);
+      color: var(--font-color);
+      -webkit-text-stroke: 2.5px var(--stroke-color);
+      background-image: url(VAR_BACKGROUND_IMAGE);
+      background-repeat: no-repeat;
+    }
+  </style>
+</head>
+<body>
+  <div>VAR_CONTENT</div>
+</body>
+<script>
+  const dom = document.querySelector('body')
+  const div = dom.querySelector('div')
+  let fontSize = VAR_MAX_FONT_SIZE
+  dom.style.fontSize = fontSize + 'px'
+  while (div.offsetWidth >= VAR_OFFSET_WIDTH && fontSize > VAR_MIN_FONT_SIZE) {
+    dom.style.fontSize = --fontSize + 'px'
+  }
+</script>
