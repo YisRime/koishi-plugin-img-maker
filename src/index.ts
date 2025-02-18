@@ -118,7 +118,7 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return segment.image(image)
+            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
           } else if (options.bb) {
             if (!content) return '请提供要生成的内容'
             const img = readFileSync(path.resolve(__dirname, './assets/images/beibao.jpg'))
@@ -134,7 +134,7 @@ export function apply(ctx: Context, config: Config) {
                 img
               })
             )
-            return segment.image(image)
+            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
           } else if (options.balogo) {
             if (!content) return '请提供要生成的内容'
             const page = await ctx.puppeteer.browser.newPage()
@@ -153,9 +153,10 @@ export function apply(ctx: Context, config: Config) {
             }, { left: content, right: options.balogo }, config.balogo)
 
             const canvas = await page.$('#output')
+            // 直接返回Buffer而不是转base64
             const image = await canvas.screenshot({ type: 'png', omitBackground: true })
             await page.close()
-            return segment.image(`data:image/png;base64,${image.toString('base64')}`)
+            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
           } else if (options.mcpfp) {
             if(!config.mcpfp.enablePfp) return '该指令未启用'
             const player = content || config.mcpfp.initName
@@ -172,7 +173,7 @@ export function apply(ctx: Context, config: Config) {
               config.mcpfp.gradientDirection,
               skinUrl
             )
-            return segment.image(image)
+            return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
           }
 
           if (!content) return '请提供要生成的内容'
@@ -181,7 +182,7 @@ export function apply(ctx: Context, config: Config) {
               <h1>${content}</h1>
             </div>
           `)
-          return segment.image(image)
+          return segment.image(Buffer.isBuffer(image) ? image : Buffer.from(image, 'utf8'), 'png')
         } catch (error) {
           return '图片生成失败：' + error.message
         }
@@ -291,7 +292,8 @@ function getDirectionPos(value: number): [number, number, number, number] {
 }
 
 async function generatePfpPic(ctx: Context, wall: string | string[] | { startColor: string, endColor: string }, direction = 0, skin?: string) {
-  var scale = 15
+  // 减小画布尺寸
+  var scale = 8 // 进一步减小尺寸
   var canvas = await ctx.canvas.createCanvas(20 * scale, 20 * scale)
   var ctx2d = canvas.getContext('2d')
   ctx2d.imageSmoothingEnabled = false
@@ -306,7 +308,7 @@ async function generatePfpPic(ctx: Context, wall: string | string[] | { startCol
   gradient.addColorStop(0, colors[0])
   gradient.addColorStop(1, colors[1])
   ctx2d.fillStyle = gradient
-  ctx2d.fillRect(0, 0, 300, 300)
+  ctx2d.fillRect(0, 0, 160, 160) // 减小背景尺寸
 
   // 绘制阴影
   const shading = await ctx.canvas.loadImage(PSHADING_20X20)
@@ -315,15 +317,16 @@ async function generatePfpPic(ctx: Context, wall: string | string[] | { startCol
 
   if (!skin) {
     const failed = await ctx.canvas.loadImage(NOT_FOUND_PFP)
-    ctx2d.drawImage(failed, 0, 0, 281, 281)
+    ctx2d.drawImage(failed, 0, 0, 150, 150) // 减小默认图尺寸
     ctx2d.fillStyle = '#000000'
-    ctx2d.fillRect(75, 281, 150, 300 - 281)
+    ctx2d.fillRect(40, 150, 80, 160 - 150)
     ctx2d.drawImage(shading, 0, 0, 20 * scale, 20 * scale)
-    return await canvas.toDataURL('image/png')
+    // 返回Buffer而不是base64
+    return canvas.toBuffer('image/png')
   }
 
   // 绘制皮肤
-  // ...绘制皮肤的具体逻辑...
   ctx2d.drawImage(shading, 0, 0, 20 * scale, 20 * scale)
-  return await canvas.toDataURL('image/png')
+  // 返回Buffer而不是base64
+  return canvas.toBuffer('image/png')
 }
