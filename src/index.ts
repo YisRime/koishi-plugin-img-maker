@@ -105,13 +105,7 @@ export function apply(ctx: Context, config: Config) {
       .example('make -balogo 档案 蔚蓝')
       .example('make -mcpfp Notch')
       .action(async ({ options }, content) => {
-        let browserContext
-        let page
-
         try {
-          browserContext = await ctx.puppeteer.browser.createBrowserContext()
-          page = await browserContext.newPage()
-
           let image: Buffer
 
           if (options.xb || options.bb) {
@@ -119,7 +113,7 @@ export function apply(ctx: Context, config: Config) {
             const cfg = options.xb ? config.xibao : config.beibao
             const img = readFileSync(path.resolve(__dirname, `./assets/images/${template}.jpg`))
 
-            await page.setContent(generateHTML({
+            const html = generateHTML({
               text: content,
               fontFamily: cfg.fontFamily,
               fontColor: options.xb ? '#ff0a0a' : '#000500',
@@ -128,41 +122,39 @@ export function apply(ctx: Context, config: Config) {
               minFontSize: cfg.minFontSize,
               offsetWidth: cfg.offsetWidth,
               img
-            }))
-
-            await page.waitForSelector('.container')
-            const element = await page.$('.container')
-            image = await element.screenshot({
-              type: 'png'
             })
+
+            const result = await takeScreenshot(ctx, html, {
+              selector: '.container',
+              timeout: 10000,
+              maxHeight: 4000
+            })
+
+            image = result.image
 
           } else if (options.balogo) {
             if (!content) return '请提供要生成的内容'
 
-            await page.goto(`file://${path.resolve(__dirname, '../public/balogo.html')}`, {
-              waitUntil: 'networkidle0',
-              timeout: 10000
+            const result = await takeScreenshot(ctx, `file://${path.resolve(__dirname, '../public/balogo.html')}`, {
+              selector: '#output',
+              timeout: 10000,
+              beforeScreenshot: async (page) => {
+                await page.evaluate(async (inputs, config) => {
+                  const ba = new BALogo({
+                    options: {
+                      fontSize: config.fontSize,
+                      transparent: config.transparent,
+                      haloX: config.haloX,
+                      haloY: config.haloY
+                    },
+                    config
+                  })
+                  await ba.draw({ textL: inputs.left, textR: inputs.right })
+                }, { left: content, right: options.balogo }, config.balogo)
+              }
             })
 
-            await page.evaluate(async (inputs, config) => {
-              const ba = new BALogo({
-                options: {
-                  fontSize: config.fontSize,
-                  transparent: config.transparent,
-                  haloX: config.haloX,
-                  haloY: config.haloY
-                },
-                config
-              })
-              await ba.draw({ textL: inputs.left, textR: inputs.right })
-            }, { left: content, right: options.balogo }, config.balogo)
-
-            await page.waitForSelector('#output')
-            const canvas = await page.$('#output')
-            image = await canvas.screenshot({
-              type: 'png',
-              omitBackground: true
-            })
+            image = result.image
 
           } else if (options.mcpfp) {
             if(!config.mcpfp.enablePfp) return '该指令未启用'
@@ -183,21 +175,20 @@ export function apply(ctx: Context, config: Config) {
           } else {
             if (!content) return '请提供要生成的内容'
 
-            await page.setContent(`
+            const result = await takeScreenshot(ctx, `
               <div style="padding: 20px; background: white;">
                 <h1>${escapeHTML(content)}</h1>
               </div>
-            `)
-
-            const element = await page.$('div')
-            image = await element.screenshot({
-              type: 'png'
+            `, {
+              selector: 'div',
+              timeout: 5000
             })
+
+            image = result.image
           }
 
           if (!image || image.length === 0) {
-            logger.error('图片生成失败: 空的图片缓冲区')
-            return '图片生成失败'
+            throw new Error('生成的图片为空')
           }
 
           return h.image(image, 'image/png')
@@ -205,12 +196,91 @@ export function apply(ctx: Context, config: Config) {
         } catch (error) {
           logger.error(`图片生成错误: ${error.message}`)
           return '图片生成失败：' + error.message
-        } finally {
-          // 确保资源被释放
-          if (page) await page.close()
-          if (browserContext) await browserContext.close()
         }
       })
+}
+
+// 添加截图配置接口
+interface ScreenshotOptions {
+  selector?: string
+  timeout?: number
+  maxHeight?: number
+  beforeScreenshot?: (page: any) => Promise<void>
+}
+
+// 添加通用截图函数
+async function takeScreenshot(ctx: Context, url: string, options: ScreenshotOptions = {}) {
+  const {
+    selector = 'body',
+    timeout = 30000,
+    maxHeight = 4000,
+    beforeScreenshot
+  } = options
+
+  const browserContext = await ctx.puppeteer.browser.createBrowserContext()
+  const page = await browserContext.newPage()
+
+  try {
+    // 设置页面加载超时
+    await page.setDefaultNavigationTimeout(timeout)
+
+    // 如果是文件URL，使用文件协议加载
+    if (url.startsWith('file://')) {
+      await page.goto(url, {
+        waitUntil: 'networkidle0',
+        timeout
+      })
+    } else {
+      // 否则设置页面HTML内容
+      await page.setContent(url, {
+        waitUntil: 'networkidle0',
+        timeout
+      })
+    }
+
+    // 等待选择器出现
+    await page.waitForSelector(selector, { timeout })
+
+    // 执行截图前的自定义处理
+    if (beforeScreenshot) {
+      await beforeScreenshot(page)
+    }
+
+    // 获取目标元素
+    const element = await page.$(selector)
+    if (!element) {
+      throw new Error(`未找到元素: ${selector}`)
+    }
+
+    // 获取元素尺寸
+    const box = await element.boundingBox()
+    if (!box) {
+      throw new Error('无法获取元素尺寸')
+    }
+
+    // 限制截图高度
+    const height = Math.min(box.height, maxHeight)
+
+    // 截取图片
+    const image = await element.screenshot({
+      type: 'png',
+      clip: {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height
+      }
+    })
+
+    return {
+      image,
+      truncated: box.height > maxHeight
+    }
+
+  } finally {
+    await page.close()
+    await browserContext.close()
+  }
 }
 
 function generateHTML(params: {
