@@ -1,7 +1,7 @@
 import { Context, Schema, h } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import {} from '@koishijs/canvas'  // 添加canvas导入
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import path from 'path'
 
 // 添加常量
@@ -90,6 +90,25 @@ export function apply(ctx: Context, config: Config) {
   // 添加日志记录
   const logger = ctx.logger('img-maker')
 
+  // 检查必要的资源文件
+  try {
+    const requiredFiles = [
+      path.resolve(__dirname, './assets/images/xibao.jpg'),
+      path.resolve(__dirname, './assets/images/beibao.jpg'),
+      path.resolve(__dirname, '../public/xbbb.html'),
+      path.resolve(__dirname, '../public/balogo.html')
+    ]
+
+    for (const file of requiredFiles) {
+      if (!existsSync(file)) {
+        throw new Error(`缺少必要的资源文件: ${file}`)
+      }
+    }
+  } catch (error) {
+    logger.error(`资源文件检查失败: ${error.message}`)
+    return
+  }
+
   ctx.command('make <content:text>')
       .usage(`支持以下类型：
 -xb 生成喜报样式图片
@@ -111,7 +130,19 @@ export function apply(ctx: Context, config: Config) {
           if (options.xb || options.bb) {
             const template = options.xb ? 'xibao' : 'beibao'
             const cfg = options.xb ? config.xibao : config.beibao
-            const img = readFileSync(path.resolve(__dirname, `./assets/images/${template}.jpg`))
+
+            // 添加错误处理和日志
+            const imagePath = path.resolve(__dirname, `./assets/images/${template}.jpg`)
+            const htmlPath = path.resolve(__dirname, '../public/xbbb.html')
+
+            if (!existsSync(imagePath)) {
+              throw new Error(`背景图片不存在: ${imagePath}`)
+            }
+            if (!existsSync(htmlPath)) {
+              throw new Error(`HTML模板不存在: ${htmlPath}`)
+            }
+
+            const img = readFileSync(imagePath)
 
             const html = generateHTML({
               text: content,
@@ -124,7 +155,9 @@ export function apply(ctx: Context, config: Config) {
               img
             })
 
-            const result = await takeScreenshot(ctx, html, {
+            // 使用data URI直接加载HTML
+            const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+            const result = await takeScreenshot(ctx, dataUri, {
               selector: '.container',
               timeout: 10000,
               maxHeight: 4000
@@ -294,18 +327,48 @@ function generateHTML(params: {
   img: Buffer
 }) {
   const text = escapeHTML(params.text).replaceAll('\n', '<br/>')
-  let template = readFileSync(path.resolve(__dirname, '../public/xbbb.html'), 'utf8')
 
-  // 替换模板中的变量
-  template = template
-    .replace('var(--font-family)', params.fontFamily)
-    .replace('var(--font-color)', params.fontColor)
-    .replace('var(--stroke-color)', params.strokeColor)
-    .replace('VAR_BACKGROUND_IMAGE', `data:image/png;base64,${params.img.toString('base64')}`)
-    .replace('VAR_CONTENT', text)
-    .replace('VAR_MAX_FONT_SIZE', params.maxFontSize.toString())
-    .replace('VAR_MIN_FONT_SIZE', params.minFontSize.toString())
-    .replace('VAR_OFFSET_WIDTH', params.offsetWidth.toString())
+  // 内联HTML模板，避免文件加载问题
+  const template = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        .container {
+          position: relative;
+          display: inline-block;
+        }
+        .text {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: ${params.offsetWidth}px;
+          font-family: ${params.fontFamily};
+          color: ${params.fontColor};
+          text-align: center;
+          -webkit-text-stroke: 3px ${params.strokeColor};
+          font-size: ${params.maxFontSize}px;
+          white-space: pre-wrap;
+          word-break: break-all;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <img src="data:image/jpeg;base64,${params.img.toString('base64')}" />
+        <div class="text">${text}</div>
+      </div>
+      <script>
+        const text = document.querySelector('.text');
+        while (text.scrollHeight > text.parentElement.clientHeight && text.style.fontSize.replace('px', '') > ${params.minFontSize}) {
+          text.style.fontSize = (parseInt(text.style.fontSize) - 1) + 'px';
+        }
+      </script>
+    </body>
+    </html>
+  `
 
   return template
 }
