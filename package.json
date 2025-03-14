@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-img-maker",
-  "description": "制作有趣的图片，生成各种各样的图",
+  "description": "图片生成器，支持生成表情包等（开发中）",
   "version": "0.0.10",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
@@ -8,14 +8,19 @@
     "lib",
     "dist"
   ],
-  "license": "MIT",
+  "license": "GPL-3.0",
   "keywords": [
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "image",
+    "img",
+    "make"
   ],
+  "devDependencies": {
+    "koishi-plugin-puppeteer": "^3.5.2"
+  },
   "peerDependencies": {
-    "koishi": "^4.18.7",
-    "koishi-plugin-puppeteer": "^3.4.0"
+    "koishi": "^4.18.7"
   }
 }
